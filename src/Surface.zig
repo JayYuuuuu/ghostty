@@ -8161,12 +8161,31 @@ fn completeClipboardReadOSC52(
     ), .unlocked);
 }
 
+/// Title of cmux DevBox status reports (see showDesktopNotification).
+const devbox_report_title = "cmux-devbox-claude-usage";
+
 fn showDesktopNotification(self: *Surface, title: [:0]const u8, body: [:0]const u8) !void {
     // Wyhash is used to hash the contents of the desktop notification to limit
     // how fast identical notifications can be sent sequentially.
     const hash_algorithm = std.hash.Wyhash;
 
     const now: std.Io.Timestamp = .now(global.io(), .awake);
+
+    // cmux DevBox: remote status reports ride this OSC with a reserved title
+    // and are consumed by the app, never shown by the OS. Several sessions
+    // report within the same second, so they bypass the rate limits below
+    // (and do not count against them).
+    if (std.mem.eql(u8, title, devbox_report_title)) {
+        _ = try self.rt_app.performAction(
+            .{ .surface = self },
+            .desktop_notification,
+            .{
+                .title = title,
+                .body = body,
+            },
+        );
+        return;
+    }
 
     // Set a limit of one desktop notification per second so that the OS
     // doesn't kill us when we run out of resources.
