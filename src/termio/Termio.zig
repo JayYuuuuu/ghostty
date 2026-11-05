@@ -490,7 +490,7 @@ fn queueMessageManual(self: *Termio, msg: termio.Message) void {
     };
 
     switch (msg) {
-        .color_scheme_report => |v| self.colorSchemeReport(&td, v.force) catch |err| {
+        .color_scheme_report => |v| self.colorSchemeReport(&td, v.force, v.scheme) catch |err| {
             log.warn("manual inline color_scheme_report failed err={}", .{err});
         },
         .crash => @panic("crash request, crashing intentionally"),
@@ -986,9 +986,19 @@ test "processed output sequence advances after output is applied" {
 }
 
 /// Sends a DSR response for the current color scheme to the pty.
-pub fn colorSchemeReport(self: *Termio, td: *ThreadData, force: bool) !void {
+pub fn colorSchemeReport(
+    self: *Termio,
+    td: *ThreadData,
+    force: bool,
+    scheme: ?terminalpkg.device_status.ColorScheme,
+) !void {
     self.renderer_state.mutex.lockUncancelable(global.io());
     defer self.renderer_state.mutex.unlock(global.io());
+
+    if (scheme) |s| self.config.conditional_state.theme = switch (s) {
+        .light => .light,
+        .dark => .dark,
+    };
 
     try self.colorSchemeReportLocked(td, force);
 }

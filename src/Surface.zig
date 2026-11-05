@@ -2394,6 +2394,10 @@ pub fn updateConfig(
     errdefer self.alloc.destroy(termio_config_ptr);
     termio_config_ptr.* = try termio.Termio.DerivedConfig.init(self.alloc, config);
     errdefer termio_config_ptr.deinit();
+    // The surface's own conditional state is authoritative for color scheme
+    // reports. `config` keeps the state it was loaded with when the
+    // conditional state does not change it (see changeConditionalState).
+    termio_config_ptr.conditional_state = self.config_conditional_state;
 
     _ = self.renderer_thread.mailbox.push(global.io(), renderer_message, .{ .forever = {} });
     self.queueIo(.{
@@ -6843,8 +6847,16 @@ pub fn colorSchemeCallback(self: *Surface, scheme: apprt.ColorScheme) !void {
     self.config_conditional_state.theme = new_scheme;
     self.notifyConfigConditionalState();
 
-    // If mode 2031 is on, then we report the change live.
-    self.queueIo(.{ .color_scheme_report = .{ .force = false } }, .unlocked);
+    // If mode 2031 is on, then we report the change live. The new scheme
+    // travels with the message so the report (and later DSR 996 replies)
+    // use it even if no config update reaches the IO thread.
+    self.queueIo(.{ .color_scheme_report = .{
+        .force = false,
+        .scheme = switch (new_scheme) {
+            .light => .light,
+            .dark => .dark,
+        },
+    } }, .unlocked);
 }
 
 pub fn posToViewport(self: Surface, xpos: f64, ypos: f64) terminal.point.Coordinate {

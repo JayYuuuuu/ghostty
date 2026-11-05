@@ -20,6 +20,14 @@ pub const Message = union(enum) {
     color_scheme_report: struct {
         /// Force write the current color scheme
         force: bool,
+
+        /// The surface's new color scheme, when this report announces a
+        /// change. The IO thread adopts it before reporting: its derived
+        /// config only learns the scheme from a later config update, which
+        /// may never come when the conditional state does not affect the
+        /// config (e.g. the same theme for light and dark), so reports would
+        /// otherwise stay on the scheme the config was first loaded with.
+        scheme: ?terminal.device_status.ColorScheme = null,
     },
 
     /// Purposely crash the renderer. This is used for testing and debugging.
