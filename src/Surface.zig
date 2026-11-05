@@ -929,7 +929,13 @@ pub fn init(
         try termio.Termio.init(&self.io, alloc, .{
             .size = size,
             .full_config = config,
-            .config = try termio.Termio.DerivedConfig.init(alloc, config),
+            .config = config: {
+                var derived = try termio.Termio.DerivedConfig.init(alloc, config);
+                // Report the surface's scheme, not the one `config` was
+                // loaded with (see the same override in updateConfig).
+                derived.conditional_state = app.config_conditional_state;
+                break :config derived;
+            },
             .backend = io_backend,
             .suppress_terminal_responses = if (comptime @hasDecl(apprt.runtime.Surface, "suppressTerminalResponses"))
                 rt_surface.suppressTerminalResponses()
