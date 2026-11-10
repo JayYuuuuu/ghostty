@@ -104,24 +104,34 @@ float contrast_ratio(float3 color1, float3 color2) {
 }
 
 // Return the fg if the contrast ratio is greater than min, otherwise
-// return a color that satisfies the contrast ratio. Currently, the color
-// is always white or black, whichever has the highest contrast ratio.
+// return a color that satisfies the contrast ratio.
 //
-// Takes colors in linear RGB space. If your colors are gamma
-// encoded, linearize them before using them with this function.
-float4 contrasted_color(float min, float4 fg, float4 bg) {
-  float ratio = contrast_ratio(fg.rgb, bg.rgb);
-  if (ratio < min) {
-    float white_ratio = contrast_ratio(float3(1.0f), bg.rgb);
-    float black_ratio = contrast_ratio(float3(0.0f), bg.rgb);
-    if (white_ratio > black_ratio) {
-      return float4(1.0f);
-    } else {
-      return float4(0.0f, 0.0f, 0.0f, 1.0f);
-    }
-  }
+// The check uses the color the glyph actually shows: a translucent (faint)
+// fg is composited over the bg first. A failing color keeps its hue: it is
+// scaled toward black (or mixed toward white on dark backgrounds) just far
+// enough to reach the ratio, so dim hints stay lighter than body text and
+// colored text stays colored. Only when even black/white cannot reach the
+// ratio does it fall back to black or white.
+//
+// Takes colors in linear RGB space, fg premultiplied by its alpha.
+float4 contrasted_color(float min_ratio, float4 fg, float4 bg) {
+  float3 shown = fg.rgb + bg.rgb * (1.0f - fg.a);
+  if (contrast_ratio(shown, bg.rgb) >= min_ratio) return fg;
 
-  return fg;
+  float bg_lum = luminance(bg.rgb);
+  float shown_lum = luminance(shown);
+  float white_ratio = contrast_ratio(float3(1.0f), bg.rgb);
+  float black_ratio = contrast_ratio(float3(0.0f), bg.rgb);
+  if (white_ratio > black_ratio) {
+    float target = min_ratio * (bg_lum + 0.05f) - 0.05f;
+    if (target >= 1.0f || shown_lum >= 1.0f) return float4(1.0f);
+    float t = clamp((target - shown_lum) / (1.0f - shown_lum), 0.0f, 1.0f);
+    return float4(mix(shown, float3(1.0f), t), 1.0f);
+  } else {
+    float target = (bg_lum + 0.05f) / min_ratio - 0.05f;
+    if (target <= 0.0f || shown_lum <= 0.0f) return float4(0.0f, 0.0f, 0.0f, 1.0f);
+    return float4(shown * clamp(target / shown_lum, 0.0f, 1.0f), 1.0f);
+  }
 }
 
 // Load a 4 byte RGBA non-premultiplied color and linearize
