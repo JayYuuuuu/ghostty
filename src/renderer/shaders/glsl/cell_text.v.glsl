@@ -136,8 +136,18 @@ void main() {
     // change the color of the text to ensure it has enough contrast
     // with the background.
     if (min_contrast > 1.0f && (glyph_bools & NO_MIN_CONTRAST) == 0) {
+        // Measure against an opaque backdrop: a translucent global bg would
+        // otherwise read darker than the background the user actually sees.
+        uvec4 backdrop_color = unpack4u8(bg_color_packed_4u8);
+        backdrop_color.a = 255u;
+        vec4 cell_bg = load_color(
+                unpack4u8(bg_colors[grid_pos.y * grid_size.x + grid_pos.x]),
+                true
+            );
+        vec4 contrast_bg = cell_bg + load_color(backdrop_color, true) * vec4(1.0 - cell_bg.a);
+
         // Ensure our minimum contrast
-        out_data.color = contrasted_color(min_contrast, out_data.color, out_data.bg_color);
+        out_data.color = contrasted_color(min_contrast, out_data.color, contrast_bg);
     }
 
     // Check if current position is under cursor (including wide cursor)

@@ -669,8 +669,25 @@ vertex CellTextVertexOut cell_text_vertex(
   // change the color of the text to ensure it has enough contrast
   // with the background.
   if (uniforms.min_contrast > 1.0f && (in.bools & NO_MIN_CONTRAST) == 0) {
+    // Measure against an opaque backdrop: glass styles and layer-background
+    // mode zero the global bg alpha (the host layer paints the terminal
+    // background), which would otherwise read as black and push dark text
+    // on a light theme toward white.
+    uchar4 backdrop_color = uniforms.bg_color;
+    backdrop_color.a = 255;
+    float4 cell_bg = load_color(
+      bg_colors[in.grid_pos.y * uniforms.grid_size.x + in.grid_pos.x],
+      uniforms.use_display_p3,
+      true
+    );
+    float4 contrast_bg = cell_bg + load_color(
+      backdrop_color,
+      uniforms.use_display_p3,
+      true
+    ) * (1.0f - cell_bg.a);
+
     // Ensure our minimum contrast
-    out.color = contrasted_color(uniforms.min_contrast, out.color, out.bg_color);
+    out.color = contrasted_color(uniforms.min_contrast, out.color, contrast_bg);
   }
 
   // Check if current position is under cursor (including wide cursor)
